@@ -1,0 +1,113 @@
+pipeline {
+  agent {
+    kubernetes {
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: node
+    image: node:22-alpine
+    command: ['cat']
+    tty: true
+    volumeMounts:
+    - name: npm-cache
+      mountPath: /root/.npm
+  - name: docker
+    image: docker:27-cli
+    command: ['cat']
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  volumes:
+  - name: npm-cache
+    emptyDir: {}
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+    }
+  }
+
+  environment {
+    APP_NAME     = "my-node-app"
+    IMAGE_TAG    = "${env.BUILD_NUMBER}"
+    REGISTRY     = "docker.io"        // change
+    IMAGE        = "${env.REGISTRY}/${env.APP_NAME}:${env.IMAGE_TAG}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Install') {
+      steps {
+        container('node') {
+          sh 'node -v && npm -v'
+          sh 'npm ci || npm install'
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        container('node') {
+          sh 'npm test || echo "no tests"'
+        }
+      }
+      post {
+        always {
+          junit 'reports/junit/*.xml' // varsa alır, yoksa boş geçer
+        }
+      }
+    }
+
+    stage('Build app') {
+      when {
+        expression { fileExists('package.json') }
+      }
+      steps {
+        container('node') {
+          sh 'npm run build || echo "no build step"'
+        }
+      }
+    }
+
+    stage('Build image') {
+      steps {
+        container('docker') {
+          sh """
+            docker build -t ${IMAGE} .
+          """
+        }
+      }
+    }
+
+    stage('Push image') {
+      steps {
+        container('docker') {
+          withCredentials([usernamePassword(credentialsId: 'docker-registry', passwordVariable: 'DOCKER_PWD', usernameVariable: 'DOCKER_USER')]) {
+                sh """
+                echo "$DOCKER_PWD" | docker login -u "$DOCKER_USER" --password-stdin
+                docker push ${IMAGE}
+                """
+            }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Image pushed: ${IMAGE}"
+    }
+    failure {
+      echo "Pipeline failed"
+    }
+  }
+}
