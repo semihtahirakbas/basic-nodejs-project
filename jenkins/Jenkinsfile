@@ -14,18 +14,19 @@ spec:
     volumeMounts:
     - name: npm-cache
       mountPath: /root/.npm
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug
+  - name: docker
+    image: docker:27-cli
     command: ['cat']
     tty: true
     volumeMounts:
-    - name: kaniko-cache
-      mountPath: /cache
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
   volumes:
   - name: npm-cache
     emptyDir: {}
-  - name: kaniko-cache
-    emptyDir: {}
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
 """
     }
   }
@@ -33,7 +34,7 @@ spec:
   environment {
     APP_NAME  = "tahirefendii/tahir-basic-nodejs-project"
     IMAGE_TAG = "${env.BUILD_NUMBER}"
-    IMAGE     = "docker.io/${APP_NAME}:${IMAGE_TAG}"
+    IMAGE     = "${APP_NAME}:${IMAGE_TAG}"
   }
 
   stages {
@@ -63,33 +64,25 @@ spec:
       }
     }
 
-    stage('Build & Push image (kaniko)') {
+    stage('Build image') {
       steps {
-        container('kaniko') {
+        container('docker') {
+          sh "docker build -t ${IMAGE} ."
+        }
+      }
+    }
+
+    stage('Push image') {
+      steps {
+        container('docker') {
           withCredentials([usernamePassword(
-            credentialsId: 'docker-registry',
+            credentialsId: 'docker-registry',   // Jenkins’te eklediğin ID
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PWD'
           )]) {
             sh """
-              mkdir -p /kaniko/.docker
-              cat > /kaniko/.docker/config.json <<EOF
-              {
-                "auths": {
-                  "https://index.docker.io/v1/": {
-                    "username": "${DOCKER_USER}",
-                    "password": "${DOCKER_PWD}"
-                  }
-                }
-              }
-EOF
-
-              /kaniko/executor \
-                --context `pwd` \
-                --dockerfile Dockerfile \
-                --destination ${IMAGE} \
-                --cache=true \
-                --cache-dir=/cache
+              echo "$DOCKER_PWD" | docker login -u "$DOCKER_USER" --password-stdin
+              docker push ${IMAGE}
             """
           }
         }
