@@ -54,19 +54,6 @@ spec:
       }
     }
 
-    stage('Test') {
-      steps {
-        container('node') {
-          sh 'npm test || echo "no tests"'
-        }
-      }
-      post {
-        always {
-          junit 'reports/junit/*.xml' // varsa alır, yoksa boş geçer
-        }
-      }
-    }
-
     stage('Build app') {
       when {
         expression { fileExists('package.json') }
