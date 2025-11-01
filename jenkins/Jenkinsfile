@@ -21,6 +21,10 @@ spec:
     volumeMounts:
     - name: kaniko-cache
       mountPath: /cache
+  - name: argocd
+    image: argoproj/argocd:v2.13.0
+    command: ['cat']
+    tty: true
   volumes:
   - name: npm-cache
     emptyDir: {}
@@ -31,9 +35,11 @@ spec:
   }
 
   environment {
-    APP_NAME  = "tahirefendii/tahir-basic-nodejs-project"
-    IMAGE_TAG = "${env.BUILD_NUMBER}"
-    IMAGE     = "docker.io/${APP_NAME}:${IMAGE_TAG}"
+    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"            // docker repo
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"                                // build num
+    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"                 // full image
+    ARGOCD_APP = "my-nodejs-app"                                      // ArgoCD'deki app adı → değiştir
+    ARGOCD_SRV = "argocd.apps.example.com"                            // ArgoCD server → değiştir
   }
 
   stages {
@@ -67,30 +73,61 @@ spec:
       steps {
         container('kaniko') {
           withCredentials([usernamePassword(
-            credentialsId: 'docker-registry',
+            credentialsId: 'docker-registry',           // Jenkins'teki Docker Hub cred ID
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PWD'
           )]) {
-            sh """
+            // groovy interpolation uyarısını azaltmak için dosyaya yazıyoruz
+            writeFile file: 'docker-config.json', text: """{
+  "auths": {
+    "https://index.docker.io/v1/": {
+      "username": "${DOCKER_USER}",
+      "password": "${DOCKER_PWD}"
+    }
+  }
+}"""
+            sh '''
               mkdir -p /kaniko/.docker
-              cat > /kaniko/.docker/config.json <<EOF
-              {
-                "auths": {
-                  "https://index.docker.io/v1/": {
-                    "username": "${DOCKER_USER}",
-                    "password": "${DOCKER_PWD}"
-                  }
-                }
-              }
-EOF
+              cp docker-config.json /kaniko/.docker/config.json
 
               /kaniko/executor \
                 --context `pwd` \
                 --dockerfile Dockerfile \
-                --destination ${IMAGE} \
+                --destination ''' + "${IMAGE}" + ''' \
                 --cache=true \
                 --cache-dir=/cache
-            """
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Update ArgoCD') {
+      steps {
+        container('argocd') {
+          withCredentials([usernamePassword(
+            credentialsId: 'argocd-creds',              // Jenkins'te oluşturacağın ArgoCD kullanıcı/parola
+            usernameVariable: 'ARGOCD_USER',
+            passwordVariable: 'ARGOCD_PASS'
+          )]) {
+            sh '''
+              # ArgoCD'ye login
+              argocd login ''' + "${ARGOCD_SRV}" + ''' \
+                --username "$ARGOCD_USER" \
+                --password "$ARGOCD_PASS" \
+                --insecure \
+                --grpc-web
+
+              # Uygulamadaki image tag'ini güncelle
+              # Burası senin manifestine göre değişir:
+              # 1) Helm parametresi ise: --parameter image.tag=<tag>
+              # 2) Kustomize image ise: --kustomize-image <image>=<new>
+              argocd app set ''' + "${ARGOCD_APP}" + ''' \
+                --parameter image.tag=''' + "${IMAGE_TAG}" + '''
+
+              # İstersen direkt sync et
+              argocd app sync ''' + "${ARGOCD_APP}" + '''
+            '''
           }
         }
       }
