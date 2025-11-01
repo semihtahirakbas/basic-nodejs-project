@@ -32,7 +32,6 @@ spec:
   }
 
   environment {
-    // Docker Hub hesabın
     APP_NAME  = "tahirefendii/tahir-basic-nodejs-project"
     IMAGE_TAG = "${env.BUILD_NUMBER}"
     IMAGE     = "${APP_NAME}:${IMAGE_TAG}"
@@ -68,9 +67,7 @@ spec:
     stage('Build image') {
       steps {
         container('docker') {
-          sh """
-            docker build -t ${IMAGE} .
-          """
+          sh "docker build -t ${IMAGE} ."
         }
       }
     }
@@ -78,13 +75,11 @@ spec:
     stage('Push image') {
       steps {
         container('docker') {
-          withCredentials([
-            usernamePassword(
-              credentialsId: 'docker-registry',   // Jenkins’te eklediğin ID
-              passwordVariable: 'DOCKER_PWD',
-              usernameVariable: 'DOCKER_USER'
-            )
-          ]) {
+          withCredentials([usernamePassword(
+            credentialsId: 'docker-registry',   // Jenkins’te eklediğin ID
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PWD'
+          )]) {
             sh """
               echo "$DOCKER_PWD" | docker login -u "$DOCKER_USER" --password-stdin
               docker push ${IMAGE}
