@@ -32,10 +32,10 @@ spec:
   }
 
   environment {
-    APP_NAME     = "my-node-app"
-    IMAGE_TAG    = "${env.BUILD_NUMBER}"
-    REGISTRY     = "docker.io"        // change
-    IMAGE        = "${env.REGISTRY}/${env.APP_NAME}:${env.IMAGE_TAG}"
+    // Docker Hub hesabın
+    APP_NAME  = "tahirefendii/tahir-basic-nodejs-project"
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+    IMAGE     = "${APP_NAME}:${IMAGE_TAG}"
   }
 
   stages {
@@ -78,12 +78,18 @@ spec:
     stage('Push image') {
       steps {
         container('docker') {
-          withCredentials([usernamePassword(credentialsId: 'docker-registry', passwordVariable: 'DOCKER_PWD', usernameVariable: 'DOCKER_USER')]) {
-                sh """
-                echo "$DOCKER_PWD" | docker login -u "$DOCKER_USER" --password-stdin
-                docker push ${IMAGE}
-                """
-            }
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'docker-registry',   // Jenkins’te eklediğin ID
+              passwordVariable: 'DOCKER_PWD',
+              usernameVariable: 'DOCKER_USER'
+            )
+          ]) {
+            sh """
+              echo "$DOCKER_PWD" | docker login -u "$DOCKER_USER" --password-stdin
+              docker push ${IMAGE}
+            """
+          }
         }
       }
     }
