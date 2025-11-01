@@ -14,19 +14,18 @@ spec:
     volumeMounts:
     - name: npm-cache
       mountPath: /root/.npm
-  - name: docker
-    image: docker:27-cli
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
     command: ['cat']
     tty: true
     volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
+    - name: kaniko-cache
+      mountPath: /cache
   volumes:
   - name: npm-cache
     emptyDir: {}
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
+  - name: kaniko-cache
+    emptyDir: {}
 """
     }
   }
@@ -34,7 +33,7 @@ spec:
   environment {
     APP_NAME  = "tahirefendii/tahir-basic-nodejs-project"
     IMAGE_TAG = "${env.BUILD_NUMBER}"
-    IMAGE     = "${APP_NAME}:${IMAGE_TAG}"
+    IMAGE     = "docker.io/${APP_NAME}:${IMAGE_TAG}"
   }
 
   stages {
@@ -64,25 +63,33 @@ spec:
       }
     }
 
-    stage('Build image') {
+    stage('Build & Push (kaniko)') {
       steps {
-        container('docker') {
-          sh "docker build -t ${IMAGE} ."
-        }
-      }
-    }
-
-    stage('Push image') {
-      steps {
-        container('docker') {
+        container('kaniko') {
           withCredentials([usernamePassword(
-            credentialsId: 'docker-registry',   // Jenkins’te eklediğin ID
+            credentialsId: 'docker-registry',
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PWD'
           )]) {
             sh """
-              echo "$DOCKER_PWD" | docker login -u "$DOCKER_USER" --password-stdin
-              docker push ${IMAGE}
+              mkdir -p /kaniko/.docker
+              cat > /kaniko/.docker/config.json <<EOF
+              {
+                "auths": {
+                  "https://index.docker.io/v1/": {
+                    "username": "${DOCKER_USER}",
+                    "password": "${DOCKER_PWD}"
+                  }
+                }
+              }
+EOF
+
+              /kaniko/executor \
+                --context `pwd` \
+                --dockerfile Dockerfile \
+                --destination ${IMAGE} \
+                --cache=true \
+                --cache-dir=/cache
             """
           }
         }
