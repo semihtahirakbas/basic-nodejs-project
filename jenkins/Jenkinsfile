@@ -22,7 +22,7 @@ spec:
     - name: kaniko-cache
       mountPath: /cache
   - name: argocd
-    image: argoproj/argocd:v2.13.0
+    image: quay.io/argoproj/argocd:v2.13.0
     command: ['cat']
     tty: true
   volumes:
