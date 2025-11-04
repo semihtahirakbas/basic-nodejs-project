@@ -35,11 +35,11 @@ spec:
   }
 
   environment {
-    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"              // Docker Hub repo
-    IMAGE_TAG  = "${env.BUILD_NUMBER}"                                  // Build num
-    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"                   // Full image
-    ARGOCD_APP = "my-nodejs-app"                                        // Argo CD app name
-    ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"           // In-cluster Argo CD server
+    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"        // Docker Hub repo
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"                            // Build num
+    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"             // Full image
+    ARGOCD_APP = "my-nodejs-app"                                  // Argo CD app name
+    ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"     // In-cluster Argo CD server
   }
 
   stages {
@@ -73,7 +73,7 @@ spec:
       steps {
         container('kaniko') {
           withCredentials([usernamePassword(
-            credentialsId: 'docker-registry',              // Jenkins Docker Hub cred ID
+            credentialsId: 'docker-registry',          // Jenkins Docker Hub cred ID
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PWD'
           )]) {
@@ -86,13 +86,15 @@ spec:
   }
 }"""
             sh '''
+              set -eux
+
               mkdir -p /kaniko/.docker
               cp docker-config.json /kaniko/.docker/config.json
 
               /kaniko/executor \
-                --context `pwd` \
+                --context "$(pwd)" \
                 --dockerfile Dockerfile \
-                --destination ''' + "${IMAGE}" + ''' \
+                --destination "$IMAGE" \
                 --cache=true \
                 --cache-dir=/cache
             '''
@@ -106,22 +108,33 @@ spec:
         timeout(time: 2, unit: 'MINUTES') {
           container('argocd') {
             withCredentials([usernamePassword(
-              credentialsId: 'argocd-creds',               // Jenkins Argo CD kullanıcı/parola cred ID
+              credentialsId: 'argocd-creds',           // Jenkins Argo CD kullanıcı/parola cred ID
               usernameVariable: 'ARGOCD_USER',
               passwordVariable: 'ARGOCD_PASS'
             )]) {
-              sh """#!/bin/sh -xe
-echo "================================== ARGOCD ==================================="
-echo "============================================================================="
-argocd version
+              sh '''#!/bin/sh -xe
 
-argocd login argocd-server.argocd.svc.cluster.local:443 --username admin --password X-CpuarkenIV75Qf --insecure
+echo "================= ArgoCD Update ================="
+echo "ARGOCD_SRV = $ARGOCD_SRV"
+echo "ARGOCD_APP = $ARGOCD_APP"
+echo "IMAGE_TAG  = $IMAGE_TAG"
 
-argocd app set ${ARGOCD_APP} \\
-  --parameter image.tag=${IMAGE_TAG}
+# Sadece client versiyonu (server'a bağlanmaz)
+argocd version --client
 
-argocd app sync ${ARGOCD_APP}
-"""
+# Login (manuel denediğin komutun aynısı, ama env ile)
+argocd login "$ARGOCD_SRV" \
+  --username "$ARGOCD_USER" \
+  --password "$ARGOCD_PASS" \
+  --insecure
+
+# Image tag güncelle
+argocd app set "$ARGOCD_APP" \
+  --parameter image.tag="$IMAGE_TAG"
+
+# Sync
+argocd app sync "$ARGOCD_APP"
+'''
             }
           }
         }
