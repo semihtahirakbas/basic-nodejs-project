@@ -21,9 +21,12 @@ spec:
     volumeMounts:
     - name: kaniko-cache
       mountPath: /cache
-  - name: argocd-cli
-    image: quay.io/argoproj/argocd:v2.13.0
-    command: ['cat']
+  - name: tooling
+    image: alpine:3.20
+    command:
+      - sh
+      - -c
+      - sleep 3600
     tty: true
   volumes:
   - name: npm-cache
@@ -106,14 +109,38 @@ spec:
 
     stage('Update ArgoCD') {
       steps {
-        timeout(time: 2, unit: 'MINUTES') {
-          container('argocd-cli') {
+        timeout(time: 5, unit: 'MINUTES') {
+          container('tooling') {
             withCredentials([usernamePassword(
-              credentialsId: 'argocd',           // Jenkins'teki ArgoCD cred ID
+              credentialsId: 'argocd',
               usernameVariable: 'ARGOCD_USER',
               passwordVariable: 'ARGOCD_PASS'
             )]) {
-              sh 'echo "Hello from argocd container"'
+              sh '''
+                set -eux
+
+                # Araçları yükle (tek seferlik gibi düşün, container ephemeral zaten)
+                apk add --no-cache curl bash ca-certificates
+
+                # ArgoCD CLI indir
+                if [ ! -x /usr/local/bin/argocd ]; then
+                  curl -sSL -o /usr/local/bin/argocd \
+                    https://github.com/argoproj/argo-cd/releases/download/v2.13.0/argocd-linux-amd64
+                  chmod +x /usr/local/bin/argocd
+                fi
+
+                argocd version
+
+                argocd login "$ARGOCD_SRV" \
+                  --username "$ARGOCD_USER" \
+                  --password "$ARGOCD_PASS" \
+                  --insecure \
+                  --grpc-web
+
+                argocd app sync "$ARGOCD_APP" \
+                  --grpc-web \
+                  --timeout 120
+              '''
             }
           }
         }
