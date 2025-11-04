@@ -22,9 +22,9 @@ spec:
     - name: kaniko-cache
       mountPath: /cache
   - name: tooling
-      image: alpine:3.20
-      command: ["sh", "-c", "sleep 3600"]
-      tty: true
+    image: alpine:3.20
+    command: ["sh", "-c", "sleep 3600"]
+    tty: true
   volumes:
   - name: npm-cache
     emptyDir: {}
@@ -110,23 +110,27 @@ spec:
         container('tooling') {
           sh '''
             set -eux
-            # kubectl ve argocd CLI yükle (örnek)
-            apk add --no-cache curl bash
-            curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v2.13.0/argocd-linux-amd64
+            apk add --no-cache curl bash ca-certificates
+            curl -sSL -o /usr/local/bin/argocd \
+              https://github.com/argoproj/argo-cd/releases/download/v2.13.0/argocd-linux-amd64
             chmod +x /usr/local/bin/argocd
           '''
         }
       }
     }
 
-    stage('ArgoCD Test') {
+    stage('ArgoCD Login') {
       steps {
         container('tooling') {
           sh '''
             set -eux
             argocd version || echo "argocd cli çalışıyor"
 
-            argocd login argocd-server.argocd.svc.cluster.local:443 --username admin --password X-CpuarkenIV75Qf --insecure
+            argocd login "$ARGOCD_SRV" \
+              --username admin \
+              --password X-CpuarkenIV75Qf \
+              --insecure \
+              --grpc-web
           '''
         }
       }
@@ -137,11 +141,17 @@ spec:
         container('tooling') {
           sh '''
             set -eux
-            argocd app sync "" \
-                  --parameter image.repository="$REPOSITORY" \
-                  --parameter image.tag="$IMAGE_TAG" \
-                  --grpc-web \
-                  --timeout 120
+
+            # App parametrelerini güncelle
+            argocd app set "$ARGOCD_APP" \
+              --parameter image.repository="$REPOSITORY" \
+              --parameter image.tag="$IMAGE_TAG" \
+              --grpc-web
+
+            # Sonra sync et
+            argocd app sync "$ARGOCD_APP" \
+              --grpc-web \
+              --timeout 120
           '''
         }
       }
