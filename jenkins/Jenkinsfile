@@ -106,18 +106,49 @@ spec:
 
     stage('Update ArgoCD') {
       steps {
-              sh '''
-              kubectl exec -n jenkins argocd-cli -- \
-                argocd login argocd-server.argocd.svc.cluster.local:443 \
-                  --username admin \
-                  --password X-CpuarkenIV75Qf \
-                  --insecure &&
-                argocd app set my-nodejs-app --parameter image.tag=${IMAGE_TAG} &&
-                argocd app sync my-nodejs-app
-              '''
+        timeout(time: 2, unit: 'MINUTES') {
+          container('node') {
+            withCredentials([usernamePassword(
+              credentialsId: 'argocd',           // Jenkins'teki ArgoCD cred ID
+              usernameVariable: 'ARGOCD_USER',
+              passwordVariable: 'ARGOCD_PASS'
+            )]) {
+              sh '''#!/bin/sh -eux
+
+echo "[DEBUG] running in: $(hostname)"
+echo "[DEBUG] installing kubectl"
+
+# alpine tabanlı node:22-alpine → önce curl al
+apk add --no-cache curl
+
+KVER=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+curl -Lo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl"
+chmod +x /usr/local/bin/kubectl
+
+echo "[DEBUG] kubectl client version:"
+kubectl version --client
+
+echo "[DEBUG] exec into argocd-cli pod and run argocd login + sync"
+
+kubectl exec -n jenkins argocd-cli -- \
+  argocd login "$ARGOCD_SRV" \
+    --username "$ARGOCD_USER" \
+    --password "$ARGOCD_PASS" \
+    --insecure
+
+kubectl exec -n jenkins argocd-cli -- \
+  argocd app set "$ARGOCD_APP" --parameter image.tag="$IMAGE_TAG"
+
+kubectl exec -n jenkins argocd-cli -- \
+  argocd app sync "$ARGOCD_APP"
+
+echo "[DEBUG] done"
+'''
             }
           }
-  }
+        }
+      }
+    }
 
   post {
     success {
