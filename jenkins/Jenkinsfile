@@ -35,11 +35,11 @@ spec:
   }
 
   environment {
-    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"            // docker repo
-    IMAGE_TAG  = "${env.BUILD_NUMBER}"                                // build num
-    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"                 // full image
-    ARGOCD_APP = "my-nodejs-app"                                      // ArgoCD'deki app adı → değiştir
-    ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"                            // ArgoCD server → değiştir
+    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"              // Docker Hub repo
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"                                  // Build num
+    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"                   // Full image
+    ARGOCD_APP = "my-nodejs-app"                                        // Argo CD app name
+    ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"           // In-cluster Argo CD server
   }
 
   stages {
@@ -73,11 +73,10 @@ spec:
       steps {
         container('kaniko') {
           withCredentials([usernamePassword(
-            credentialsId: 'docker-registry',           // Jenkins'teki Docker Hub cred ID
+            credentialsId: 'docker-registry',              // Jenkins Docker Hub cred ID
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PWD'
           )]) {
-            // groovy interpolation uyarısını azaltmak için dosyaya yazıyoruz
             writeFile file: 'docker-config.json', text: """{
   "auths": {
     "https://index.docker.io/v1/": {
@@ -104,30 +103,27 @@ spec:
 
     stage('Update ArgoCD') {
       steps {
-        container('argocd') {
-          withCredentials([usernamePassword(
-            credentialsId: 'argocd-creds',              // Jenkins'te oluşturacağın ArgoCD kullanıcı/parola
-            usernameVariable: 'ARGOCD_USER',
-            passwordVariable: 'ARGOCD_PASS'
-          )]) {
-            sh '''
-              # ArgoCD'ye login
-              argocd login ''' + "${ARGOCD_SRV}" + ''' \
-                --username "$ARGOCD_USER" \
-                --password "$ARGOCD_PASS" \
-                --insecure \
-                --grpc-web
+        timeout(time: 2, unit: 'MINUTES') {
+          container('argocd') {
+            withCredentials([usernamePassword(
+              credentialsId: 'argocd-creds',               // Jenkins Argo CD kullanıcı/parola cred ID
+              usernameVariable: 'ARGOCD_USER',
+              passwordVariable: 'ARGOCD_PASS'
+            )]) {
+              sh """#!/bin/sh -xe
+argocd version
 
-              # Uygulamadaki image tag'ini güncelle
-              # Burası senin manifestine göre değişir:
-              # 1) Helm parametresi ise: --parameter image.tag=<tag>
-              # 2) Kustomize image ise: --kustomize-image <image>=<new>
-              argocd app set ''' + "${ARGOCD_APP}" + ''' \
-                --parameter image.tag=''' + "${IMAGE_TAG}" + '''
+argocd login ${ARGOCD_SRV} \\
+  --username "${ARGOCD_USER}" \\
+  --password "${ARGOCD_PASS}" \\
+  --insecure
 
-              # İstersen direkt sync et
-              argocd app sync ''' + "${ARGOCD_APP}" + '''
-            '''
+argocd app set ${ARGOCD_APP} \\
+  --parameter image.tag=${IMAGE_TAG}
+
+argocd app sync ${ARGOCD_APP}
+"""
+            }
           }
         }
       }
