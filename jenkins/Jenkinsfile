@@ -111,6 +111,8 @@ spec:
               passwordVariable: 'ARGOCD_PASS'
             )]) {
               sh """#!/bin/sh -xe
+echo "================================== ARGOCD ==================================="
+echo "============================================================================="
 argocd version
 
 argocd login argocd-server.argocd.svc.cluster.local:443 --username admin --password X-CpuarkenIV75Qf --insecure
