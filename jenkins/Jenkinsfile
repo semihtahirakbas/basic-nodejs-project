@@ -22,12 +22,9 @@ spec:
     - name: kaniko-cache
       mountPath: /cache
   - name: tooling
-    image: alpine:3.20
-    command:
-      - sh
-      - -c
-      - sleep 3600
-    tty: true
+      image: alpine:3.20
+      command: ["sh", "-c", "sleep 3600"]
+      tty: true
   volumes:
   - name: npm-cache
     emptyDir: {}
@@ -41,6 +38,7 @@ spec:
     APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"
     IMAGE_TAG  = "${env.BUILD_NUMBER}"
     IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"
+    REPOSITORY = "docker.io/${APP_NAME}"
     ARGOCD_APP = "my-nodejs-app"
     ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"
   }
@@ -107,42 +105,44 @@ spec:
       }
     }
 
-    stage('Update ArgoCD') {
+    stage('Setup tools') {
       steps {
-        timeout(time: 5, unit: 'MINUTES') {
-          container('tooling') {
-            withCredentials([usernamePassword(
-              credentialsId: 'argocd',
-              usernameVariable: 'ARGOCD_USER',
-              passwordVariable: 'ARGOCD_PASS'
-            )]) {
-              sh '''
-                set -eux
+        container('tooling') {
+          sh '''
+            set -eux
+            # kubectl ve argocd CLI yükle (örnek)
+            apk add --no-cache curl bash
+            curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v2.13.0/argocd-linux-amd64
+            chmod +x /usr/local/bin/argocd
+          '''
+        }
+      }
+    }
 
-                # Araçları yükle (tek seferlik gibi düşün, container ephemeral zaten)
-                apk add --no-cache curl bash ca-certificates
+    stage('ArgoCD Test') {
+      steps {
+        container('tooling') {
+          sh '''
+            set -eux
+            argocd version || echo "argocd cli çalışıyor"
 
-                # ArgoCD CLI indir
-                if [ ! -x /usr/local/bin/argocd ]; then
-                  curl -sSL -o /usr/local/bin/argocd \
-                    https://github.com/argoproj/argo-cd/releases/download/v2.13.0/argocd-linux-amd64
-                  chmod +x /usr/local/bin/argocd
-                fi
+            argocd login argocd-server.argocd.svc.cluster.local:443 --username admin --password X-CpuarkenIV75Qf --insecure
+          '''
+        }
+      }
+    }
 
-                argocd version
-
-                argocd login "argocd-server.argocd.svc.cluster.local:443" \
-                  --username "$ARGOCD_USER" \
-                  --password "$ARGOCD_PASS" \
-                  --insecure \
-                  --grpc-web
-
-                argocd app sync "$ARGOCD_APP" \
+    stage('ArgoCD Deployment') {
+      steps {
+        container('tooling') {
+          sh '''
+            set -eux
+            argocd app sync "" \
+                  --parameter image.repository="$REPOSITORY" \
+                  --parameter image.tag="$IMAGE_TAG" \
                   --grpc-web \
                   --timeout 120
-              '''
-            }
-          }
+          '''
         }
       }
     }
