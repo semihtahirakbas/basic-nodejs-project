@@ -35,11 +35,11 @@ spec:
   }
 
   environment {
-    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"        // Docker Hub repo
-    IMAGE_TAG  = "${env.BUILD_NUMBER}"                            // Build num
-    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"             // Full image
-    ARGOCD_APP = "my-nodejs-app"                                  // Argo CD app name
-    ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"     // In-cluster Argo CD server
+    APP_NAME   = "tahirefendii/tahir-basic-nodejs-project"
+    IMAGE_TAG  = "${env.BUILD_NUMBER}"
+    IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"
+    ARGOCD_APP = "my-nodejs-app"
+    ARGOCD_SRV = "argocd-server.argocd.svc.cluster.local:443"
   }
 
   stages {
@@ -52,6 +52,7 @@ spec:
     stage('Install') {
       steps {
         container('node') {
+          sh 'echo "Hello, i am creating a container'
           sh 'node -v && npm -v'
           sh 'npm ci || npm install'
         }
@@ -73,7 +74,7 @@ spec:
       steps {
         container('kaniko') {
           withCredentials([usernamePassword(
-            credentialsId: 'docker-registry',          // Jenkins Docker Hub cred ID
+            credentialsId: 'docker-registry',
             usernameVariable: 'DOCKER_USER',
             passwordVariable: 'DOCKER_PWD'
           )]) {
@@ -107,33 +108,43 @@ spec:
       steps {
         timeout(time: 2, unit: 'MINUTES') {
           container('argocd') {
+
+            // 1: Container gerçekten çalışıyor mu, ş var mı
+            sh 'echo "[DEBUG] Hello from argocd container"; whoami; uname -a'
+
+            // 2: env değişkenleri gerçekten var mı
+            sh 'echo "[DEBUG] ARGOCD_SRV=$ARGOCD_SRV ARGOCD_APP=$ARGOCD_APP IMAGE_TAG=$IMAGE_TAG"'
+
             withCredentials([usernamePassword(
-              credentialsId: 'argocd-creds',           // Jenkins Argo CD kullanıcı/parola cred ID
+              credentialsId: 'argocd-creds',
               usernameVariable: 'ARGOCD_USER',
               passwordVariable: 'ARGOCD_PASS'
             )]) {
-              sh '''#!/bin/sh -xe
 
-echo "================= ArgoCD Update ================="
-echo "ARGOCD_SRV = $ARGOCD_SRV"
-echo "ARGOCD_APP = $ARGOCD_APP"
-echo "IMAGE_TAG  = $IMAGE_TAG"
+              // 3: argocd binary var mı ve client versiyonu çalışıyor mu (server’a bağlanmadan)
+              sh 'echo "[DEBUG] argocd path: $(which argocd || echo not-found)"'
+              sh 'echo "[DEBUG] argocd client version:"; argocd version --client || echo "[DEBUG] argocd client failed"'
 
-# Sadece client versiyonu (server'a bağlanmaz)
-argocd version --client
+              // 4: login + set + sync
+              sh '''#!/bin/sh -eux
 
-# Login (manuel denediğin komutun aynısı, ama env ile)
+echo "[DEBUG] logging in to ArgoCD: $ARGOCD_SRV"
+
 argocd login "$ARGOCD_SRV" \
   --username "$ARGOCD_USER" \
   --password "$ARGOCD_PASS" \
   --insecure
 
-# Image tag güncelle
+echo "[DEBUG] setting image tag to $IMAGE_TAG for app $ARGOCD_APP"
+
 argocd app set "$ARGOCD_APP" \
   --parameter image.tag="$IMAGE_TAG"
 
-# Sync
+echo "[DEBUG] syncing app $ARGOCD_APP"
+
 argocd app sync "$ARGOCD_APP"
+
+echo "[DEBUG] ArgoCD update finished"
 '''
             }
           }
