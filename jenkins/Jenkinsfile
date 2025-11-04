@@ -106,46 +106,15 @@ spec:
 
     stage('Update ArgoCD') {
       steps {
-        timeout(time: 2, unit: 'MINUTES') {
-          container('argocd') {
-
-            // 1: Container gerçekten çalışıyor mu, ş var mı
-            sh 'echo "[DEBUG] Hello from argocd container"; whoami; uname -a'
-
-            // 2: env değişkenleri gerçekten var mı
-            sh 'echo "[DEBUG] ARGOCD_SRV=$ARGOCD_SRV ARGOCD_APP=$ARGOCD_APP IMAGE_TAG=$IMAGE_TAG"'
-
-            withCredentials([usernamePassword(
-              credentialsId: 'argocd',
-              usernameVariable: 'ARGOCD_USER',
-              passwordVariable: 'ARGOCD_PASS'
-            )]) {
-
-              // 3: argocd binary var mı ve client versiyonu çalışıyor mu (server’a bağlanmadan)
-              sh 'echo "[DEBUG] argocd path: $(which argocd || echo not-found)"'
-              sh 'echo "[DEBUG] argocd client version:"; argocd version --client || echo "[DEBUG] argocd client failed"'
-
-              // 4: login + set + sync
-              sh '''#!/bin/sh -eux
-
-echo "[DEBUG] logging in to ArgoCD: $ARGOCD_SRV"
-
-argocd login "$ARGOCD_SRV" \
-  --username "$ARGOCD_USER" \
-  --password "$ARGOCD_PASS" \
-  --insecure
-
-echo "[DEBUG] setting image tag to $IMAGE_TAG for app $ARGOCD_APP"
-
-argocd app set "$ARGOCD_APP" \
-  --parameter image.tag="$IMAGE_TAG"
-
-echo "[DEBUG] syncing app $ARGOCD_APP"
-
-argocd app sync "$ARGOCD_APP"
-
-echo "[DEBUG] ArgoCD update finished"
-'''
+              sh '''
+              kubectl exec -n jenkins argocd-cli -- \
+                argocd login argocd-server.argocd.svc.cluster.local:443 \
+                  --username admin \
+                  --password X-CpuarkenIV75Qf \
+                  --insecure &&
+                argocd app set my-nodejs-app --parameter image.tag=${IMAGE_TAG} &&
+                argocd app sync my-nodejs-app
+              '''
             }
           }
         }
