@@ -113,10 +113,7 @@ spec:
               sh """#!/bin/sh -xe
 argocd version
 
-argocd login ${ARGOCD_SRV} \\
-  --username "${ARGOCD_USER}" \\
-  --password "${ARGOCD_PASS}" \\
-  --insecure
+argocd login argocd-server.argocd.svc.cluster.local:443 --username admin --password X-CpuarkenIV75Qf --insecure
 
 argocd app set ${ARGOCD_APP} \\
   --parameter image.tag=${IMAGE_TAG}
