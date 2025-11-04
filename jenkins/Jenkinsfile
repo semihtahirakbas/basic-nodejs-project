@@ -116,7 +116,7 @@ spec:
             sh 'echo "[DEBUG] ARGOCD_SRV=$ARGOCD_SRV ARGOCD_APP=$ARGOCD_APP IMAGE_TAG=$IMAGE_TAG"'
 
             withCredentials([usernamePassword(
-              credentialsId: 'argocd-creds',
+              credentialsId: 'argocd',
               usernameVariable: 'ARGOCD_USER',
               passwordVariable: 'ARGOCD_PASS'
             )]) {
