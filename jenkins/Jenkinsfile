@@ -149,6 +149,7 @@ echo "[DEBUG] done"
         }
       }
     }
+  }
 
   post {
     success {
