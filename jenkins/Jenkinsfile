@@ -142,19 +142,34 @@ spec:
           sh '''
             set -eux
 
-            # App parametrelerini güncelle
-            argocd app set "$ARGOCD_APP" \
-              --parameter image.repository="$REPOSITORY" \
-              --parameter image.tag="$IMAGE_TAG" \
-              --grpc-web
+            # Önce app üzerinde devam eden operasyon varsa bitsin
+        # Operasyon yoksa "no operation in progress" hatası gelir, onu umursamıyoruz
+        argocd app wait "$ARGOCD_APP" \
+          --operation \
+          --grpc-web \
+          --timeout 600 || true
 
-            # Sonra sync et
-            argocd app sync "$ARGOCD_APP" \
-              --grpc-web \
-              --prune \
-              --force \
-              --replace \
-              --timeout 120
+        # Parametreleri güncelle
+        argocd app set "$ARGOCD_APP" \
+          --parameter image.repository="$REPOSITORY" \
+          --parameter image.tag="$IMAGE_TAG" \
+          --grpc-web
+
+        # Yeni sync operasyonu başlat
+        argocd app sync "$ARGOCD_APP" \
+          --grpc-web \
+          --prune \
+          --force \
+          --replace \
+          --timeout 120
+
+        # Başlattığın sync'in gerçekten bitmesini ve sağlıklı olmasını bekle
+        argocd app wait "$ARGOCD_APP" \
+          --sync \
+          --health \
+          --operation \
+          --grpc-web \
+          --timeout 600
           '''
         }
       }
