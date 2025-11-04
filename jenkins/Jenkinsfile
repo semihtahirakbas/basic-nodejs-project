@@ -39,7 +39,7 @@ spec:
     IMAGE_TAG  = "${env.BUILD_NUMBER}"                                // build num
     IMAGE      = "docker.io/${APP_NAME}:${IMAGE_TAG}"                 // full image
     ARGOCD_APP = "my-nodejs-app"                                      // ArgoCD'deki app adı → değiştir
-    ARGOCD_SRV = "localhost:3000"                            // ArgoCD server → değiştir
+    ARGOCD_SRV = "localhost:3001"                            // ArgoCD server → değiştir
   }
 
   stages {
