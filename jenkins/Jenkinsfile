@@ -21,7 +21,7 @@ spec:
     volumeMounts:
     - name: kaniko-cache
       mountPath: /cache
-  - name: argocd
+  - name: argocd-cli
     image: quay.io/argoproj/argocd:v2.13.0
     command: ['cat']
     tty: true
@@ -107,7 +107,7 @@ spec:
     stage('Update ArgoCD') {
       steps {
         timeout(time: 2, unit: 'MINUTES') {
-          container('argocd') {
+          container('argocd-cli') {
             withCredentials([usernamePassword(
               credentialsId: 'argocd',           // Jenkins'teki ArgoCD cred ID
               usernameVariable: 'ARGOCD_USER',
