@@ -52,7 +52,7 @@ spec:
     stage('Install') {
       steps {
         container('node') {
-          sh 'echo "Hello, i am creating a container'
+          sh 'echo "Hello, i am creating a container"'
           sh 'node -v && npm -v'
           sh 'npm ci || npm install'
         }
