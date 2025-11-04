@@ -151,6 +151,9 @@ spec:
             # Sonra sync et
             argocd app sync "$ARGOCD_APP" \
               --grpc-web \
+              --prune \
+              --force \
+              --replace \
               --timeout 120
           '''
         }
